@@ -11,6 +11,7 @@ import (
 	"github.com/GangaRamPrasad2004/sentinal/internal/config"
 	"github.com/GangaRamPrasad2004/sentinal/internal/handlers"
 	"github.com/GangaRamPrasad2004/sentinal/internal/models"
+	"github.com/GangaRamPrasad2004/sentinal/internal/ws"
 	"github.com/alexedwards/scs/v2"
 	"github.com/pusher/pusher-http-go"
 )
@@ -20,6 +21,7 @@ var repo *handlers.DBRepo
 var session *scs.SessionManager
 var preferenceMap map[string]string
 var wsClient pusher.Client
+var wsHub *ws.Hub
 
 const sentinalVersion = "1.0.0"
 const vigilateVersion = sentinalVersion

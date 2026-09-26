@@ -5,6 +5,7 @@ import (
 
 	"github.com/GangaRamPrasad2004/sentinal/internal/config"
 	"github.com/GangaRamPrasad2004/sentinal/internal/repository"
+	"github.com/GangaRamPrasad2004/sentinal/internal/repository/dbrepo/sqlc"
 )
 
 var app *config.AppConfig
@@ -12,6 +13,7 @@ var app *config.AppConfig
 type postgresDBRepo struct {
 	App *config.AppConfig
 	DB  *sql.DB
+	q   *sqlc.Queries
 }
 
 // NewPostgresRepo creates the repository
@@ -20,6 +22,7 @@ func NewPostgresRepo(Conn *sql.DB, a *config.AppConfig) repository.DatabaseRepo 
 	return &postgresDBRepo{
 		App: a,
 		DB:  Conn,
+		q:   sqlc.New(Conn),
 	}
 }
 

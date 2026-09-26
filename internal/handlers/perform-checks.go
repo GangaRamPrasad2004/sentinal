@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
+	"net"
 	"net/http"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +29,14 @@ const (
 	HTTPS = 2
 	// SSLCertificate is ssl certificate check
 	SSLCertificate = 3
+	// TCPPort is TCP port probing (PostgreSQL, Redis, etc.)
+	TCPPort = 4
+	// ICMPPing is ping reachability check
+	ICMPPing = 5
+	// DNSResolution is DNS lookup check
+	DNSResolution = 6
+	// JSONValidation is JSON payload and HTTP status code validation
+	JSONValidation = 7
 )
 
 // jsonResp describes the JSON response sent back to client
@@ -182,15 +194,34 @@ func (repo *DBRepo) testServiceForHost(h models.Host, hs models.HostService) (st
 	switch hs.ServiceID {
 	case HTTP:
 		msg, newStatus = testHTTPForHost(h.URL)
-		break
-
 	case HTTPS:
 		msg, newStatus = testHTTPSForHost(h.URL)
-		break
-
 	case SSLCertificate:
 		msg, newStatus = testSSLForHost(h.URL)
-		break
+	case TCPPort:
+		msg, newStatus = testTCPForHost(h, 5432)
+	case ICMPPing:
+		msg, newStatus = testPingForHost(h)
+	case DNSResolution:
+		msg, newStatus = testDNSForHost(h)
+	case JSONValidation:
+		msg, newStatus = testJSONPayloadForHost(h.URL)
+	default:
+		// Dynamic matching by ServiceName for custom and extended services
+		name := strings.ToLower(hs.Service.ServiceName)
+		if strings.Contains(name, "redis") {
+			msg, newStatus = testTCPForHost(h, 6379)
+		} else if strings.Contains(name, "postgres") || strings.Contains(name, "tcp") || strings.Contains(name, "port") {
+			msg, newStatus = testTCPForHost(h, 5432)
+		} else if strings.Contains(name, "ping") || strings.Contains(name, "icmp") {
+			msg, newStatus = testPingForHost(h)
+		} else if strings.Contains(name, "dns") {
+			msg, newStatus = testDNSForHost(h)
+		} else if strings.Contains(name, "json") || strings.Contains(name, "api") {
+			msg, newStatus = testJSONPayloadForHost(h.URL)
+		} else {
+			msg, newStatus = testHTTPForHost(h.URL)
+		}
 	}
 
 	// broadcast to clients if appropriate
@@ -441,6 +472,148 @@ func (repo *DBRepo) removeFromMonitorMap(hs models.HostService) {
 		data := make(map[string]string)
 		data["host_service_id"] = strconv.Itoa(hs.ID)
 		repo.broadcastMessage("public-channel", "schedule-item-removed-event", data)
-
 	}
+}
+
+// getTargetHost extracts the host/IP from Host record
+func getTargetHost(h models.Host) string {
+	if h.IP != "" {
+		return h.IP
+	}
+	target := h.URL
+	target = strings.TrimPrefix(target, "https://")
+	target = strings.TrimPrefix(target, "http://")
+	if idx := strings.Index(target, "/"); idx != -1 {
+		target = target[:idx]
+	}
+	if host, _, err := net.SplitHostPort(target); err == nil {
+		return host
+	}
+	return target
+}
+
+// testTCPForHost probes a TCP port (e.g., PostgreSQL :5432, Redis :6379)
+func testTCPForHost(h models.Host, defaultPort int) (string, string) {
+	targetHost := getTargetHost(h)
+	port := defaultPort
+	if port <= 0 {
+		port = 5432
+	}
+
+	// Check if host URL or IP has custom port
+	targetWithPort := h.URL
+	if targetWithPort == "" {
+		targetWithPort = h.IP
+	}
+	clean := strings.TrimPrefix(strings.TrimPrefix(targetWithPort, "https://"), "http://")
+	if idx := strings.Index(clean, "/"); idx != -1 {
+		clean = clean[:idx]
+	}
+	if _, p, err := net.SplitHostPort(clean); err == nil {
+		if parsedPort, err := strconv.Atoi(p); err == nil && parsedPort > 0 {
+			port = parsedPort
+		}
+	}
+
+	address := net.JoinHostPort(targetHost, strconv.Itoa(port))
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
+	duration := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		return fmt.Sprintf("TCP %s connection failed: %v", address, err), "problem"
+	}
+	_ = conn.Close()
+
+	return fmt.Sprintf("TCP %s connected successfully in %v", address, duration), "healthy"
+}
+
+// testPingForHost sends an ICMP ping to verify host reachability
+func testPingForHost(h models.Host) (string, string) {
+	target := getTargetHost(h)
+	if target == "" {
+		return "Ping failed: no host IP or URL configured", "problem"
+	}
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("ping", "-n", "1", "-w", "2000", target)
+	} else {
+		cmd = exec.Command("ping", "-c", "1", "-W", "2", target)
+	}
+
+	start := time.Now()
+	_, err := cmd.CombinedOutput()
+	duration := time.Since(start).Round(time.Millisecond)
+
+	if err != nil {
+		// Fallback to TCP probe on common ports (80/443) if ICMP is blocked or restricted
+		conn, dialErr := net.DialTimeout("tcp", net.JoinHostPort(target, "80"), 2*time.Second)
+		if dialErr == nil {
+			_ = conn.Close()
+			return fmt.Sprintf("Ping %s responded (TCP fallback) in %v", target, duration), "healthy"
+		}
+		return fmt.Sprintf("Ping %s failed: %v", target, err), "problem"
+	}
+
+	return fmt.Sprintf("Ping %s replied successfully in %v", target, duration), "healthy"
+}
+
+// testDNSForHost verifies DNS resolution for a domain
+func testDNSForHost(h models.Host) (string, string) {
+	domain := getTargetHost(h)
+	if domain == "" {
+		return "DNS failed: no host domain or URL configured", "problem"
+	}
+
+	start := time.Now()
+	ips, err := net.LookupHost(domain)
+	duration := time.Since(start).Round(time.Millisecond)
+
+	if err != nil {
+		return fmt.Sprintf("DNS lookup for %s failed: %v", domain, err), "problem"
+	}
+
+	if len(ips) == 0 {
+		return fmt.Sprintf("DNS lookup for %s returned 0 IP records", domain), "problem"
+	}
+
+	return fmt.Sprintf("DNS %s resolved to [%s] in %v", domain, strings.Join(ips, ", "), duration), "healthy"
+}
+
+// testJSONPayloadForHost validates HTTP status code and verifies that response is valid JSON
+func testJSONPayloadForHost(url string) (string, string) {
+	if strings.HasSuffix(url, "/") {
+		url = strings.TrimSuffix(url, "/")
+	}
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "http://" + url
+	}
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	start := time.Now()
+	resp, err := client.Get(url)
+	duration := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		return fmt.Sprintf("%s - connection error: %v", url, err), "problem"
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Sprintf("%s - HTTP %d (%s) in %v", url, resp.StatusCode, resp.Status, duration), "problem"
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Sprintf("%s - failed to read response body: %v", url, err), "problem"
+	}
+
+	var parsed interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return fmt.Sprintf("%s - HTTP %d received, but response is not valid JSON (%v)", url, resp.StatusCode, err), "warning"
+	}
+
+	return fmt.Sprintf("%s - HTTP %d OK with valid JSON payload (%d bytes) in %v", url, resp.StatusCode, len(body), duration), "healthy"
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/GangaRamPrasad2004/sentinal/internal/driver"
 	"github.com/GangaRamPrasad2004/sentinal/internal/handlers"
 	"github.com/GangaRamPrasad2004/sentinal/internal/helpers"
+	"github.com/GangaRamPrasad2004/sentinal/internal/ws"
 	"github.com/alexedwards/scs/postgresstore"
 	"github.com/alexedwards/scs/v2"
 	"github.com/pusher/pusher-http-go"
@@ -126,19 +127,27 @@ func setupApp() (*string, error) {
 
 	app.PreferenceMap = preferenceMap
 
-	// create pusher client
-	wsClient = pusher.Client{
-		AppID:  *pusherApp,
-		Secret: *pusherSecret,
-		Key:    *pusherKey,
-		Secure: *pusherSecure,
-		Host:   fmt.Sprintf("%s:%s", *pusherHost, *pusherPort),
+	// initialize native websocket hub
+	wsHub = ws.NewHub()
+	go wsHub.Run()
+
+	// if external pusher is explicitly configured, use it; otherwise use native websocket hub
+	if *pusherHost != "" && *pusherKey != "" {
+		wsClient = pusher.Client{
+			AppID:  *pusherApp,
+			Secret: *pusherSecret,
+			Key:    *pusherKey,
+			Secure: *pusherSecure,
+			Host:   fmt.Sprintf("%s:%s", *pusherHost, *pusherPort),
+		}
+		app.WsClient = &wsClient
+		log.Println("Host", fmt.Sprintf("%s:%s", *pusherHost, *pusherPort))
+		log.Println("Secure", *pusherSecure)
+	} else {
+		app.WsClient = wsHub
+		log.Println("Using native Go WebSockets (no secondary Ipê process needed)")
 	}
 
-	log.Println("Host", fmt.Sprintf("%s:%s", *pusherHost, *pusherPort))
-	log.Println("Secure", *pusherSecure)
-
-	app.WsClient = &wsClient
 	monitorMap := make(map[int]cron.EntryID)
 	app.MonitorMap = monitorMap
 

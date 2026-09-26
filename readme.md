@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/goversion-1.16.x-blue.svg)](https://golang.org)
+[![Version](https://img.shields.io/badge/goversion-1.22+-blue.svg)](https://golang.org)
 <a href="https://golang.org"><img src="https://img.shields.io/badge/powered_by-Go-3362c2.svg?style=flat-square" alt="Built with GoLang"></a>
 [![Go Report Card](https://goreportcard.com/badge/github.com/GangaRamPrasad2004/sentinal)](https://goreportcard.com/report/github.com/GangaRamPrasad2004/sentinal)
 
@@ -28,39 +28,33 @@ env GOOS=linux GOARCH=amd64 go build -o sentinal cmd/web/*.go
 
 ## Requirements
 
-sentinal requires:
-- Postgres 11 or later (db is set up as a repository, so other databases are possible)
-- An account with [Pusher](https://pusher.com/), or a Pusher alternative 
-(like [ipê](https://github.com/dimiro1/ipe))
+Sentinal requires:
+- Go 1.22 or later
+- Postgres 11 or later
+- *(Optional)* Pusher or Ipê (native WebSockets are built-in by default; no external process required!)
+
+## Features & Checks
+
+- **Native WebSockets**: Built-in real-time push events powered by Go WebSockets (`gorilla/websocket`).
+- **Type-Safe SQL**: Database queries and models compile-time verified using [sqlc](https://sqlc.dev/).
+- **Extended Service Checks**:
+  - **HTTP / HTTPS**: Status code and connectivity validation.
+  - **SSL Certificate**: Expiration date, issuer, and validity checks.
+  - **TCP Port Probing**: Port availability and latency verification (e.g. PostgreSQL :5432, Redis :6379).
+  - **ICMP Ping**: Network reachability and round-trip time.
+  - **DNS Resolution**: Record validation and lookup latency.
+  - **JSON Validation**: HTTP status code and response payload JSON syntax checking.
 
 ## Run
 
-First, make sure ipê is running (if you're using ipê):
-
-On Mac/Linux
-~~~
-cd ipe
-./ipe 
-~~~
-
-On Windows
-~~~
-cd ipe
-ipe.exe
-~~~
-
-Run with flags:
+Run with flags (native WebSockets are enabled automatically):
 
 ~~~
 ./sentinal \
--dbuser='tcs' \
--pusherHost='localhost' \
--pusherPort='4001' \
--pusherKey='123abc' \
--pusherSecret='abc123' \
--pusherApp="1" \
--pusherSecure=false
-~~~~
+-dbuser='postgres' \
+-db='sentinal' \
+-port=':4000'
+~~~
 
 ## All Flags
 

@@ -1,17 +1,77 @@
-<script src="/static/admin/js/pusher.min.js"></script>
-
 <script>
-    let pusher = new Pusher("{{.PreferenceMap["pusher-key"]}}", {
-        authEndPoint: "/pusher/auth",
-        wsHost: "localhost",
-        wsPort: 4001,
-        forceTLS: false,
-        enabledTransports: ["ws", "wss"],
-        disabledTransports: []
-    });
+    class NativeWSClient {
+        constructor() {
+            this.channels = {};
+            this.ws = null;
+            this.reconnectTimer = null;
+            this.init();
+        }
+
+        init() {
+            const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+            const wsUrl = protocol + window.location.host + "/ws?user_id={{.User.ID}}";
+            this.ws = new WebSocket(wsUrl);
+
+            this.ws.onopen = () => {
+                console.log("Connected to native Go WebSocket server");
+                for (let ch in this.channels) {
+                    this.sendSubscribe(ch);
+                }
+            };
+
+            this.ws.onmessage = (event) => {
+                try {
+                    let msg = JSON.parse(event.data);
+                    if (msg.channel && this.channels[msg.channel]) {
+                        this.channels[msg.channel].dispatch(msg.event, msg.data);
+                    }
+                } catch (err) {
+                    console.error("Error parsing websocket message:", err);
+                }
+            };
+
+            this.ws.onclose = () => {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = setTimeout(() => this.init(), 2000);
+            };
+
+            this.ws.onerror = (err) => {
+                try { this.ws.close(); } catch (_) {}
+            };
+        }
+
+        sendSubscribe(channelName) {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ event: "subscribe", channel: channelName }));
+            }
+        }
+
+        subscribe(channelName) {
+            if (!this.channels[channelName]) {
+                this.channels[channelName] = {
+                    events: {},
+                    bind: function(eventName, callback) {
+                        if (!this.events[eventName]) {
+                            this.events[eventName] = [];
+                        }
+                        this.events[eventName].push(callback);
+                    },
+                    dispatch: function(eventName, data) {
+                        if (this.events[eventName]) {
+                            this.events[eventName].forEach(cb => cb(data));
+                        }
+                    }
+                };
+                this.sendSubscribe(channelName);
+            }
+            return this.channels[channelName];
+        }
+    }
+
+    let pusher = new NativeWSClient();
 
     let publicChannel = pusher.subscribe("public-channel");
-    let privateChannel = pusher.subscribe("private-channel-{{.User.ID}}")
+    let privateChannel = pusher.subscribe("private-channel-{{.User.ID}}");
 
     privateChannel.bind("private-message", function(data) {
         attention.alert({

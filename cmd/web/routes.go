@@ -23,6 +23,9 @@ func routes() http.Handler {
 
 	mux.Get("/user/logout", handlers.Repo.Logout)
 
+	// native websocket route (eliminates need for Ipê/Pusher process)
+	mux.Get("/ws", wsHub.ServeWS)
+
 	// our pusher routes
 	mux.Route("/pusher", func(mux chi.Router) {
 		mux.Use(Auth)

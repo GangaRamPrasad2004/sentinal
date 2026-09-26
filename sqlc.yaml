@@ -1,0 +1,10 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "internal/repository/dbrepo/sqlc/schema.sql"
+    queries: "internal/repository/dbrepo/sqlc/queries"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/repository/dbrepo/sqlc"
+        sql_package: "database/sql"

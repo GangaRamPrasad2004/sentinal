@@ -134,3 +134,30 @@ func RenderPage(w http.ResponseWriter, r *http.Request, templateName string, var
 	}
 	return nil
 }
+
+// GetPathParam extracts a path parameter using Go 1.22+ r.PathValue with fallback
+func GetPathParam(r *http.Request, key string) string {
+	if val := r.PathValue(key); val != "" {
+		return val
+	}
+	return ""
+}
+
+// SliceContains is a generic function to check if a slice contains a value (Go 1.22+ Generics)
+func SliceContains[T comparable](slice []T, target T) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+// MapKeys returns the keys of the map m as a slice (Go 1.22+ Generics)
+func MapKeys[K comparable, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
