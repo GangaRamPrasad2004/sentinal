@@ -98,7 +98,7 @@ func setupApp() (*string, error) {
 		Domain:       *domain,
 		PusherSecret: *pusherSecret,
 		MailQueue:    mailQueue,
-		Version:      vigilateVersion,
+		Version:      sentinalVersion,
 		Identifier:   *identifier,
 	}
 
@@ -122,7 +122,7 @@ func setupApp() (*string, error) {
 	preferenceMap["pusher-port"] = *pusherPort
 	preferenceMap["pusher-key"] = *pusherKey
 	preferenceMap["identifier"] = *identifier
-	preferenceMap["version"] = vigilateVersion
+	preferenceMap["version"] = sentinalVersion
 
 	app.PreferenceMap = preferenceMap
 

@@ -1,11 +1,8 @@
-[![License](http://img.shields.io/badge/license-mit-blue.svg?style=flat-square)](https://raw.githubusercontent.com/GangaRamPrasad2004/goblender/master/LICENSE)
 [![Version](https://img.shields.io/badge/goversion-1.16.x-blue.svg)](https://golang.org)
 <a href="https://golang.org"><img src="https://img.shields.io/badge/powered_by-Go-3362c2.svg?style=flat-square" alt="Built with GoLang"></a>
 [![Go Report Card](https://goreportcard.com/badge/github.com/GangaRamPrasad2004/sentinal)](https://goreportcard.com/report/github.com/GangaRamPrasad2004/sentinal)
 
-# sentinal
-
-This is the source code for the second project in the Udemy course Working with Websockets in Go (Golang).
+# Sentinal
 
 A dead simple monitoring service, intended to replace things like Nagios.
 
@@ -68,7 +65,7 @@ Run with flags:
 ## All Flags
 
 ~~~~
-tcs@grendel sentinal-udemy % ./sentinal -help
+$ ./sentinal -help
 Usage of ./sentinal:
   -db string
         database name (default "sentinal")
